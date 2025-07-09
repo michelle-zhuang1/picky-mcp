@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "picky-mcp-server"
+version = "0.1.0"
+description = "MCP server for restaurant recommendations with Notion and Google Maps integration"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "mcp",
+    "fastmcp",
+    "notion-client",
+    "googlemaps",
+    "pydantic",
+    "python-dotenv",
+    "aiohttp",
+    "asyncio",
+    "typing-extensions",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "black",
+    "isort",
+    "mypy",
+]
+
+[project.scripts]
+picky-mcp = "src.server:main"
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.8"
+strict = true
+ignore_missing_imports = true

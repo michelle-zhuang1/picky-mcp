@@ -1,0 +1,9 @@
+mcp
+fastmcp
+notion-client
+googlemaps
+pydantic
+python-dotenv
+aiohttp
+typing-extensions
+schedule

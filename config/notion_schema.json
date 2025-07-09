@@ -1,0 +1,119 @@
+{
+  "database_schema": {
+    "title": "Restaurant Database",
+    "description": "Personal restaurant database with ratings, preferences, and visit history",
+    "properties": {
+      "Name": {
+        "type": "title",
+        "title": {}
+      },
+      "Rating": {
+        "type": "number",
+        "number": {
+          "format": "number"
+        }
+      },
+      "Cuisine": {
+        "type": "multi_select",
+        "multi_select": {
+          "options": [
+            {"name": "American", "color": "red"},
+            {"name": "Italian", "color": "orange"},
+            {"name": "Japanese", "color": "yellow"},
+            {"name": "Chinese", "color": "green"},
+            {"name": "Mexican", "color": "blue"},
+            {"name": "Indian", "color": "purple"},
+            {"name": "French", "color": "pink"},
+            {"name": "Thai", "color": "brown"},
+            {"name": "Mediterranean", "color": "gray"},
+            {"name": "Seafood", "color": "red"},
+            {"name": "Steakhouse", "color": "orange"},
+            {"name": "Pizza", "color": "yellow"},
+            {"name": "Sushi", "color": "green"},
+            {"name": "Barbecue", "color": "blue"},
+            {"name": "Vegetarian", "color": "purple"},
+            {"name": "Vegan", "color": "pink"},
+            {"name": "Fast Food", "color": "brown"},
+            {"name": "Cafe", "color": "gray"},
+            {"name": "Bakery", "color": "red"},
+            {"name": "Other", "color": "default"}
+          ]
+        }
+      },
+      "Location": {
+        "type": "rich_text",
+        "rich_text": {}
+      },
+      "City": {
+        "type": "rich_text",
+        "rich_text": {}
+      },
+      "State": {
+        "type": "rich_text",
+        "rich_text": {}
+      },
+      "Date Visited": {
+        "type": "date",
+        "date": {}
+      },
+      "Notes": {
+        "type": "rich_text",
+        "rich_text": {}
+      },
+      "Google Place ID": {
+        "type": "rich_text",
+        "rich_text": {}
+      },
+      "Price Range": {
+        "type": "select",
+        "select": {
+          "options": [
+            {"name": "$", "color": "green"},
+            {"name": "$$", "color": "yellow"},
+            {"name": "$$$", "color": "orange"},
+            {"name": "$$$$", "color": "red"}
+          ]
+        }
+      },
+      "Vibes": {
+        "type": "multi_select",
+        "multi_select": {
+          "options": [
+            {"name": "casual", "color": "blue"},
+            {"name": "romantic", "color": "pink"},
+            {"name": "family-friendly", "color": "green"},
+            {"name": "fine dining", "color": "purple"},
+            {"name": "trendy", "color": "orange"},
+            {"name": "cozy", "color": "brown"},
+            {"name": "lively", "color": "red"},
+            {"name": "quiet", "color": "gray"},
+            {"name": "outdoor", "color": "green"},
+            {"name": "sports bar", "color": "blue"},
+            {"name": "date night", "color": "pink"},
+            {"name": "business", "color": "gray"},
+            {"name": "brunch", "color": "yellow"},
+            {"name": "late night", "color": "purple"}
+          ]
+        }
+      },
+      "Revisit": {
+        "type": "checkbox",
+        "checkbox": {}
+      },
+      "Wishlist": {
+        "type": "checkbox",
+        "checkbox": {}
+      }
+    }
+  },
+  "required_properties": [
+    "Name",
+    "City"
+  ],
+  "recommended_properties": [
+    "Rating",
+    "Cuisine",
+    "Date Visited",
+    "Notes"
+  ]
+}

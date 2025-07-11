@@ -18,7 +18,7 @@ class GoogleMapsClient:
     
     def __init__(self, api_key: str = None):
         """Initialize Google Maps client."""
-        self.api_key = api_key or settings.google_maps_api_key
+        self.api_key = api_key or settings.google_places_api_key
         self.client = googlemaps.Client(key=self.api_key)
     
     def test_connection(self) -> Dict[str, Any]:

@@ -8,7 +8,7 @@ import schedule
 import time
 from threading import Thread
 
-from .notion_client import NotionManager
+from .notion_manager import NotionManager
 from .maps_client import GoogleMapsClient
 from .restaurant_manager import RestaurantManager
 from .config import settings

@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 import asyncio
 from notion_client import AsyncClient
-from notion_client.errors import NotionClientError
+from notion_client.errors import APIResponseError
 
 from .models import (
     Restaurant, Location, CuisineType, PriceRange, VibeType,
@@ -58,7 +58,7 @@ class NotionManager:
                 "restaurant_id": restaurant.id,
                 "message": f"Added restaurant '{restaurant.name}' to Notion database"
             }
-        except NotionClientError as e:
+        except APIResponseError as e:
             logger.error(f"Failed to add restaurant to Notion: {e}")
             return {"success": False, "error": str(e)}
     
@@ -77,7 +77,7 @@ class NotionManager:
                 "page_id": page_id,
                 "message": f"Updated restaurant '{restaurant.name}' in Notion database"
             }
-        except NotionClientError as e:
+        except APIResponseError as e:
             logger.error(f"Failed to update restaurant in Notion: {e}")
             return {"success": False, "error": str(e)}
     
@@ -86,7 +86,7 @@ class NotionManager:
         try:
             response = await self.client.pages.retrieve(page_id)
             return self._parse_notion_page_to_restaurant(response)
-        except NotionClientError as e:
+        except APIResponseError as e:
             logger.error(f"Failed to get restaurant by ID: {e}")
             return None
     
@@ -104,7 +104,7 @@ class NotionManager:
             if response["results"]:
                 return self._parse_notion_page_to_restaurant(response["results"][0])
             return None
-        except NotionClientError as e:
+        except APIResponseError as e:
             logger.error(f"Failed to get restaurant by name: {e}")
             return None
     
@@ -128,7 +128,7 @@ class NotionManager:
                     restaurants.append(restaurant)
             
             return restaurants
-        except NotionClientError as e:
+        except APIResponseError as e:
             logger.error(f"Failed to query restaurants: {e}")
             return []
     
@@ -159,7 +159,7 @@ class NotionManager:
                     restaurants.append(restaurant)
             
             return restaurants
-        except NotionClientError as e:
+        except APIResponseError as e:
             logger.error(f"Failed to get recent visits: {e}")
             return []
     
@@ -186,7 +186,7 @@ class NotionManager:
                     restaurants.append(restaurant)
             
             return restaurants
-        except NotionClientError as e:
+        except APIResponseError as e:
             logger.error(f"Failed to get favorites: {e}")
             return []
     
@@ -209,7 +209,7 @@ class NotionManager:
                     restaurants.append(restaurant)
             
             return restaurants
-        except NotionClientError as e:
+        except APIResponseError as e:
             logger.error(f"Failed to get wishlist: {e}")
             return []
     
@@ -227,7 +227,7 @@ class NotionManager:
             properties["Location"] = {"rich_text": [{"text": {"content": restaurant.location.address}}]}
         
         if restaurant.personal_rating:
-            properties["Rating"] = {"number": restaurant.personal_rating}
+            properties["Score"] = {"number": restaurant.personal_rating}
         
         if restaurant.cuisine_types:
             properties["Cuisine"] = {
@@ -243,10 +243,10 @@ class NotionManager:
             }
         
         if restaurant.notes:
-            properties["Notes"] = {"rich_text": [{"text": {"content": restaurant.notes}}]}
+            properties["Extra Notes"] = {"rich_text": [{"text": {"content": restaurant.notes}}]}
         
         if restaurant.date_visited:
-            properties["Date Visited"] = {"date": {"start": restaurant.date_visited.isoformat()}}
+            properties["Date"] = {"date": {"start": restaurant.date_visited.isoformat()}}
         
         if restaurant.revisit is not None:
             properties["Revisit"] = {"checkbox": restaurant.revisit}
@@ -269,18 +269,34 @@ class NotionManager:
             name_prop = properties.get("Name", {})
             name = name_prop.get("title", [{}])[0].get("plain_text", "")
             
-            city_prop = properties.get("City", {})
-            city = city_prop.get("rich_text", [{}])[0].get("plain_text", "")
+            # City (can be rich_text or multi_select)
+            city_prop = properties.get("City", {}) or properties.get("City ", {})
+            city = ""
+            if city_prop.get("rich_text") and len(city_prop["rich_text"]) > 0:
+                city = city_prop["rich_text"][0].get("plain_text", "")
+            elif city_prop.get("multi_select") and len(city_prop["multi_select"]) > 0:
+                city = city_prop["multi_select"][0].get("name", "")
             
-            if not name or not city:
+            if not city:
+                # Try getting it from any text fields
+                city = ""
+            
+            if not name:
                 return None
             
             # Location
             location_prop = properties.get("Location", {})
-            address = location_prop.get("rich_text", [{}])[0].get("plain_text", "")
+            address = ""
+            if location_prop.get("rich_text") and len(location_prop["rich_text"]) > 0:
+                address = location_prop["rich_text"][0].get("plain_text", "")
             
+            # State (can be rich_text or multi_select)
             state_prop = properties.get("State", {})
-            state = state_prop.get("rich_text", [{}])[0].get("plain_text", "")
+            state = ""
+            if state_prop.get("rich_text") and len(state_prop["rich_text"]) > 0:
+                state = state_prop["rich_text"][0].get("plain_text", "")
+            elif state_prop.get("multi_select") and len(state_prop["multi_select"]) > 0:
+                state = state_prop["multi_select"][0].get("name", "")
             
             location = Location(
                 address=address or None,
@@ -288,9 +304,15 @@ class NotionManager:
                 state=state or None
             )
             
-            # Rating
-            rating_prop = properties.get("Rating", {})
-            rating = rating_prop.get("number")
+            # Rating (check both "Rating" and "Score", handle select field with stars)
+            rating_prop = properties.get("Rating", {}) or properties.get("Score", {})
+            rating = None
+            if rating_prop.get("number"):
+                rating = rating_prop.get("number")
+            elif rating_prop.get("select") and rating_prop["select"].get("name"):
+                # Convert star ratings to numbers
+                star_text = rating_prop["select"]["name"]
+                rating = star_text.count("⭐") if "⭐" in star_text else None
             
             # Cuisine types
             cuisine_prop = properties.get("Cuisine", {})
@@ -319,12 +341,18 @@ class NotionManager:
                 except ValueError:
                     pass  # Skip invalid vibe types
             
-            # Notes
-            notes_prop = properties.get("Notes", {})
-            notes = notes_prop.get("rich_text", [{}])[0].get("plain_text", "")
+            # Notes (check "Notes", "Items tried", and "Extra Notes")
+            notes_parts = []
+            for notes_field in ["Notes", "Items tried", "Extra Notes"]:
+                notes_prop = properties.get(notes_field, {})
+                if notes_prop.get("rich_text") and len(notes_prop["rich_text"]) > 0:
+                    notes_text = notes_prop["rich_text"][0].get("plain_text", "")
+                    if notes_text:
+                        notes_parts.append(f"{notes_field}: {notes_text}")
+            notes = "; ".join(notes_parts) if notes_parts else ""
             
-            # Date visited
-            date_prop = properties.get("Date Visited", {})
+            # Date visited (check both "Date Visited" and "Date")
+            date_prop = properties.get("Date Visited", {}) or properties.get("Date", {})
             date_visited = None
             if date_prop.get("date") and date_prop["date"].get("start"):
                 try:
@@ -342,7 +370,9 @@ class NotionManager:
             
             # Google Places data
             google_place_id_prop = properties.get("Google Place ID", {})
-            google_place_id = google_place_id_prop.get("rich_text", [{}])[0].get("plain_text", "")
+            google_place_id = ""
+            if google_place_id_prop.get("rich_text") and len(google_place_id_prop["rich_text"]) > 0:
+                google_place_id = google_place_id_prop["rich_text"][0].get("plain_text", "")
             
             google_places_data = None
             if google_place_id:

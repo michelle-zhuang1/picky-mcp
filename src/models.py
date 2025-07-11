@@ -54,6 +54,7 @@ class VibeType(str, Enum):
     BUSINESS = "business"
     BRUNCH = "brunch"
     LATE_NIGHT = "late night"
+    COUNTER_SERVICE = "counter service"
 
 
 class OccasionType(str, Enum):
@@ -152,7 +153,7 @@ class RecommendationContext(BaseModel):
     cuisine_preferences: List[CuisineType] = []
     price_range: Optional[PriceRange] = None
     vibe_preferences: List[VibeType] = []
-    exclude_visited: bool = True
+    exclude_visited: bool = False
     include_wishlist: bool = True
 
 

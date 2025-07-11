@@ -6,18 +6,22 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 import json
 import uuid
+import sys
+import os
+
+# Add the project root to the Python path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from mcp.server.fastmcp import FastMCP
-from mcp.server.session import RequestContext
 
-from .config import settings, validate_configuration
-from .models import (
+from src.config import settings, validate_configuration
+from src.models import (
     Restaurant, Location, RecommendationContext, CuisineType, 
     PriceRange, VibeType, OccasionType, SessionFeedback
 )
-from .notion_client import NotionManager
-from .maps_client import GoogleMapsClient
-from .restaurant_manager import RestaurantManager
+from src.notion_manager import NotionManager
+from src.maps_client import GoogleMapsClient
+from src.restaurant_manager import RestaurantManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,21 +51,21 @@ def get_server_status() -> str:
     
     return json.dumps(status_info, indent=2)
 
-@mcp.resource("profile://dining-preferences")
-def get_dining_profile(user_id: str = "default") -> str:
+@mcp.resource("profile://dining-preferences/{user_id}")
+async def get_dining_profile(user_id: str = "default") -> str:
     """Get comprehensive dining profile for a user."""
     try:
-        profile = asyncio.run(restaurant_manager.generate_dining_profile(user_id))
+        profile = await restaurant_manager.generate_dining_profile(user_id)
         return profile
     except Exception as e:
         logger.error(f"Failed to get dining profile: {e}")
         return f"Error retrieving dining profile: {str(e)}"
 
-@mcp.resource("restaurants://recent-visits")
-def get_recent_visits(user_id: str = "default", limit: int = 10) -> str:
+@mcp.resource("restaurants://recent-visits/{user_id}/{limit}")
+async def get_recent_visits(user_id: str = "default", limit: int = 10) -> str:
     """Get recent restaurant visits."""
     try:
-        restaurants = asyncio.run(notion_client.get_recent_visits(limit))
+        restaurants = await notion_client.get_recent_visits(limit)
         
         if not restaurants:
             return "No recent visits found."
@@ -83,11 +87,11 @@ def get_recent_visits(user_id: str = "default", limit: int = 10) -> str:
         logger.error(f"Failed to get recent visits: {e}")
         return f"Error retrieving recent visits: {str(e)}"
 
-@mcp.resource("restaurants://favorites")
-def get_favorite_restaurants(user_id: str = "default", min_rating: float = 4.0) -> str:
+@mcp.resource("restaurants://favorites/{user_id}/{min_rating}")
+async def get_favorite_restaurants(user_id: str = "default", min_rating: float = 4.0) -> str:
     """Get favorite restaurants (highly rated)."""
     try:
-        restaurants = asyncio.run(notion_client.get_favorites(min_rating))
+        restaurants = await notion_client.get_favorites(min_rating)
         
         if not restaurants:
             return f"No restaurants with rating >= {min_rating} found."
@@ -109,11 +113,11 @@ def get_favorite_restaurants(user_id: str = "default", min_rating: float = 4.0) 
         logger.error(f"Failed to get favorites: {e}")
         return f"Error retrieving favorites: {str(e)}"
 
-@mcp.resource("restaurants://wishlist")
-def get_wishlist_restaurants(user_id: str = "default") -> str:
+@mcp.resource("restaurants://wishlist/{user_id}")
+async def get_wishlist_restaurants(user_id: str = "default") -> str:
     """Get wishlist restaurants."""
     try:
-        restaurants = asyncio.run(notion_client.get_wishlist())
+        restaurants = await notion_client.get_wishlist()
         
         if not restaurants:
             return "No wishlist restaurants found."
@@ -135,11 +139,11 @@ def get_wishlist_restaurants(user_id: str = "default") -> str:
         logger.error(f"Failed to get wishlist: {e}")
         return f"Error retrieving wishlist: {str(e)}"
 
-@mcp.resource("restaurants://database")
-def get_restaurant_database(user_id: str = "default") -> str:
+@mcp.resource("restaurants://database/{user_id}")
+async def get_restaurant_database(user_id: str = "default") -> str:
     """Get complete restaurant database."""
     try:
-        restaurants = asyncio.run(notion_client.get_all_restaurants())
+        restaurants = await notion_client.get_all_restaurants()
         
         database_info = {
             "total_restaurants": len(restaurants),
@@ -173,7 +177,7 @@ def get_restaurant_database(user_id: str = "default") -> str:
 
 # Restaurant recommendation tools
 @mcp.tool()
-def get_restaurant_recommendations(
+async def get_restaurant_recommendations(
     user_id: str = "default",
     city: str = None,
     state: str = None,
@@ -241,7 +245,7 @@ def get_restaurant_recommendations(
         )
         
         # Get recommendations
-        recommendations = asyncio.run(restaurant_manager.get_recommendations(user_id, context))
+        recommendations = await restaurant_manager.get_recommendations(user_id, context)
         
         if not recommendations:
             return f"No recommendations found for {location.city}. Try expanding your search radius or adjusting preferences."
@@ -282,7 +286,7 @@ def get_restaurant_recommendations(
         return f"Error getting recommendations: {str(e)}"
 
 @mcp.tool()
-def add_restaurant_visit(
+async def add_restaurant_visit(
     user_id: str = "default",
     restaurant_name: str = None,
     city: str = None,
@@ -367,14 +371,14 @@ def add_restaurant_visit(
         )
         
         # Add to Notion
-        result = asyncio.run(notion_client.add_restaurant(restaurant))
+        result = await notion_client.add_restaurant(restaurant)
         
         if result["success"]:
             # Try to enrich with Google Maps data
             try:
-                enriched_restaurant = asyncio.run(maps_client.enrich_restaurant_data(restaurant))
+                enriched_restaurant = await maps_client.enrich_restaurant_data(restaurant)
                 if enriched_restaurant.google_places_data:
-                    asyncio.run(notion_client.update_restaurant(result["page_id"], enriched_restaurant))
+                    await notion_client.update_restaurant(result["page_id"], enriched_restaurant)
             except Exception as e:
                 logger.warning(f"Failed to enrich restaurant data: {e}")
             
@@ -387,7 +391,7 @@ def add_restaurant_visit(
         return f"Error adding restaurant visit: {str(e)}"
 
 @mcp.tool()
-def update_restaurant_rating(
+async def update_restaurant_rating(
     user_id: str = "default",
     restaurant_name: str = None,
     new_rating: float = None,
@@ -409,7 +413,7 @@ def update_restaurant_rating(
             return "Error: New rating is required"
         
         # Find restaurant
-        restaurant = asyncio.run(notion_client.get_restaurant_by_name(restaurant_name))
+        restaurant = await notion_client.get_restaurant_by_name(restaurant_name)
         if not restaurant:
             return f"Restaurant '{restaurant_name}' not found in your database"
         
@@ -420,7 +424,7 @@ def update_restaurant_rating(
         restaurant.updated_at = datetime.now()
         
         # Update in Notion
-        result = asyncio.run(notion_client.update_restaurant(restaurant.notion_page_id, restaurant))
+        result = await notion_client.update_restaurant(restaurant.notion_page_id, restaurant)
         
         if result["success"]:
             return f"✅ Updated rating for {restaurant_name} to {new_rating} stars"
@@ -432,14 +436,14 @@ def update_restaurant_rating(
         return f"Error updating restaurant rating: {str(e)}"
 
 @mcp.tool()
-def analyze_dining_patterns(user_id: str = "default") -> str:
+async def analyze_dining_patterns(user_id: str = "default") -> str:
     """Analyze your dining patterns and preferences.
     
     Args:
         user_id: User identifier
     """
     try:
-        analysis = asyncio.run(restaurant_manager.analyze_dining_patterns(user_id))
+        analysis = await restaurant_manager.analyze_dining_patterns(user_id)
         
         if "error" in analysis:
             return f"Error analyzing dining patterns: {analysis['error']}"
@@ -451,7 +455,7 @@ def analyze_dining_patterns(user_id: str = "default") -> str:
         return f"Error analyzing dining patterns: {str(e)}"
 
 @mcp.tool()
-def find_similar_restaurants(
+async def find_similar_restaurants(
     user_id: str = "default",
     restaurant_name: str = None,
     max_results: int = 5
@@ -467,9 +471,7 @@ def find_similar_restaurants(
         if not restaurant_name:
             return "Error: Restaurant name is required"
         
-        similar_restaurants = asyncio.run(
-            restaurant_manager.find_similar_restaurants(restaurant_name, user_id, max_results)
-        )
+        similar_restaurants = await restaurant_manager.find_similar_restaurants(restaurant_name, user_id, max_results)
         
         if not similar_restaurants:
             return f"No similar restaurants found for '{restaurant_name}'"
@@ -498,14 +500,14 @@ def find_similar_restaurants(
         return f"Error finding similar restaurants: {str(e)}"
 
 @mcp.tool()
-def enrich_restaurant_database(user_id: str = "default") -> str:
+async def enrich_restaurant_database(user_id: str = "default") -> str:
     """Automatically enrich all restaurants with Google Maps data.
     
     Args:
         user_id: User identifier
     """
     try:
-        result = asyncio.run(restaurant_manager.enrich_restaurant_database())
+        result = await restaurant_manager.enrich_restaurant_database()
         
         if result["success"]:
             return f"✅ Database enrichment completed! {result['message']}"
@@ -517,7 +519,7 @@ def enrich_restaurant_database(user_id: str = "default") -> str:
         return f"Error enriching restaurant database: {str(e)}"
 
 @mcp.tool()
-def start_interactive_session(
+async def start_interactive_session(
     user_id: str = "default",
     city: str = None,
     state: str = None,
@@ -556,7 +558,7 @@ def start_interactive_session(
         )
         
         # Start session
-        session = asyncio.run(restaurant_manager.start_interactive_session(user_id, context))
+        session = await restaurant_manager.start_interactive_session(user_id, context)
         
         session_info = {
             "session_id": session.session_id,
@@ -584,7 +586,7 @@ def start_interactive_session(
         return f"Error starting interactive session: {str(e)}"
 
 @mcp.tool()
-def provide_session_feedback(
+async def provide_session_feedback(
     session_id: str = None,
     liked_restaurant_ids: str = None,
     disliked_restaurant_ids: str = None,
@@ -646,7 +648,7 @@ def provide_session_feedback(
         )
         
         # Process feedback
-        result = asyncio.run(restaurant_manager.process_session_feedback(session_id, feedback))
+        result = await restaurant_manager.process_session_feedback(session_id, feedback)
         
         if result["success"]:
             return f"✅ Feedback processed successfully! Your preferences have been updated."
@@ -658,7 +660,7 @@ def provide_session_feedback(
         return f"Error providing session feedback: {str(e)}"
 
 @mcp.tool()
-def get_session_recommendations(session_id: str = None) -> str:
+async def get_session_recommendations(session_id: str = None) -> str:
     """Get refined recommendations based on session feedback.
     
     Args:
@@ -668,7 +670,7 @@ def get_session_recommendations(session_id: str = None) -> str:
         if not session_id:
             return "Error: Session ID is required"
         
-        recommendations = asyncio.run(restaurant_manager.get_session_recommendations(session_id))
+        recommendations = await restaurant_manager.get_session_recommendations(session_id)
         
         if not recommendations:
             return "No recommendations found for this session"
@@ -697,7 +699,7 @@ def get_session_recommendations(session_id: str = None) -> str:
         return f"Error getting session recommendations: {str(e)}"
 
 @mcp.tool()
-def test_connections(user_id: str = "default") -> str:
+async def test_connections(user_id: str = "default") -> str:
     """Test connections to Notion and Google Maps APIs.
     
     Args:
@@ -705,7 +707,7 @@ def test_connections(user_id: str = "default") -> str:
     """
     try:
         results = {
-            "notion": asyncio.run(notion_client.test_connection()),
+            "notion": await notion_client.test_connection(),
             "google_maps": maps_client.test_connection(),
             "timestamp": datetime.now().isoformat()
         }
@@ -715,6 +717,226 @@ def test_connections(user_id: str = "default") -> str:
     except Exception as e:
         logger.error(f"Failed to test connections: {e}")
         return f"Error testing connections: {str(e)}"
+
+@mcp.tool()
+async def get_favorite_restaurants(
+    user_id: str = "default",
+    min_rating: float = 4.0,
+    limit: int = 20
+) -> str:
+    """Get your favorite restaurants with ratings, dates, and details.
+    
+    Args:
+        user_id: User identifier
+        min_rating: Minimum rating to consider as favorite (default 4.0)
+        limit: Maximum number of restaurants to return
+    """
+    try:
+        restaurants = await notion_client.get_all_restaurants()
+        
+        # Filter for favorites (restaurants with ratings >= min_rating)
+        favorites = [r for r in restaurants if r.personal_rating and r.personal_rating >= min_rating]
+        
+        # Sort by rating (highest first), then by date visited (most recent first)
+        favorites.sort(key=lambda r: (r.personal_rating or 0, r.date_visited or datetime.min), reverse=True)
+        
+        if not favorites:
+            return f"No restaurants found with rating >= {min_rating}"
+        
+        favorites_info = {
+            "total_favorites": len(favorites),
+            "criteria": f"Rating >= {min_rating}",
+            "restaurants": []
+        }
+        
+        for restaurant in favorites[:limit]:
+            restaurant_data = {
+                "name": restaurant.name,
+                "rating": restaurant.personal_rating,
+                "date_visited": restaurant.date_visited.isoformat() if restaurant.date_visited else None,
+                "location": f"{restaurant.location.city}, {restaurant.location.state}" if restaurant.location.state else restaurant.location.city,
+                "cuisine_types": [c.value for c in restaurant.cuisine_types],
+                "price_range": restaurant.price_range.value if restaurant.price_range else None,
+                "notes": restaurant.notes
+            }
+            favorites_info["restaurants"].append(restaurant_data)
+        
+        return json.dumps(favorites_info, indent=2)
+        
+    except Exception as e:
+        logger.error(f"Failed to get favorite restaurants: {e}")
+        return f"Error getting favorite restaurants: {str(e)}"
+
+@mcp.tool()
+async def search_restaurants_by_name(
+    query: str,
+    user_id: str = "default"
+) -> str:
+    """Search your visited restaurants by name.
+    
+    Args:
+        query: Restaurant name or partial name to search for
+        user_id: User identifier
+    """
+    try:
+        restaurants = await notion_client.get_all_restaurants()
+        
+        # Search for restaurants with names containing the query (case insensitive)
+        matching_restaurants = [r for r in restaurants if query.lower() in r.name.lower()]
+        
+        if not matching_restaurants:
+            return f"No restaurants found matching '{query}'"
+        
+        # Sort by rating (highest first), then by date visited (most recent first)
+        matching_restaurants.sort(key=lambda r: (r.personal_rating or 0, r.date_visited or datetime.min), reverse=True)
+        
+        search_results = {
+            "query": query,
+            "total_matches": len(matching_restaurants),
+            "restaurants": []
+        }
+        
+        for restaurant in matching_restaurants:
+            restaurant_data = {
+                "name": restaurant.name,
+                "rating": restaurant.personal_rating,
+                "date_visited": restaurant.date_visited.isoformat() if restaurant.date_visited else None,
+                "location": f"{restaurant.location.city}, {restaurant.location.state}" if restaurant.location.state else restaurant.location.city,
+                "cuisine_types": [c.value for c in restaurant.cuisine_types],
+                "price_range": restaurant.price_range.value if restaurant.price_range else None,
+                "notes": restaurant.notes,
+                "revisit": restaurant.revisit
+            }
+            search_results["restaurants"].append(restaurant_data)
+        
+        return json.dumps(search_results, indent=2)
+        
+    except Exception as e:
+        logger.error(f"Failed to search restaurants: {e}")
+        return f"Error searching restaurants: {str(e)}"
+
+@mcp.tool()
+async def get_recent_visits(
+    user_id: str = "default",
+    days: int = 30,
+    limit: int = 20
+) -> str:
+    """Get your recent restaurant visits in chronological order.
+    
+    Args:
+        user_id: User identifier
+        days: Number of days back to look for visits (default 30)
+        limit: Maximum number of visits to return
+    """
+    try:
+        restaurants = await notion_client.get_all_restaurants()
+        
+        # Filter for recent visits
+        cutoff_date = datetime.now() - timedelta(days=days)
+        recent_visits = [r for r in restaurants if r.date_visited and r.date_visited >= cutoff_date]
+        
+        if not recent_visits:
+            return f"No restaurant visits found in the last {days} days"
+        
+        # Sort by date visited (most recent first)
+        recent_visits.sort(key=lambda r: r.date_visited or datetime.min, reverse=True)
+        
+        visits_info = {
+            "period": f"Last {days} days",
+            "total_visits": len(recent_visits),
+            "visits": []
+        }
+        
+        for restaurant in recent_visits[:limit]:
+            visit_data = {
+                "name": restaurant.name,
+                "date_visited": restaurant.date_visited.isoformat() if restaurant.date_visited else None,
+                "rating": restaurant.personal_rating,
+                "location": f"{restaurant.location.city}, {restaurant.location.state}" if restaurant.location.state else restaurant.location.city,
+                "cuisine_types": [c.value for c in restaurant.cuisine_types],
+                "price_range": restaurant.price_range.value if restaurant.price_range else None,
+                "notes": restaurant.notes,
+                "revisit": restaurant.revisit
+            }
+            visits_info["visits"].append(visit_data)
+        
+        return json.dumps(visits_info, indent=2)
+        
+    except Exception as e:
+        logger.error(f"Failed to get recent visits: {e}")
+        return f"Error getting recent visits: {str(e)}"
+
+@mcp.tool()
+async def get_restaurants_by_rating(
+    min_rating: float = None,
+    max_rating: float = None,
+    user_id: str = "default",
+    limit: int = 20
+) -> str:
+    """Get restaurants filtered by rating range.
+    
+    Args:
+        min_rating: Minimum rating (optional)
+        max_rating: Maximum rating (optional)
+        user_id: User identifier
+        limit: Maximum number of restaurants to return
+    """
+    try:
+        restaurants = await notion_client.get_all_restaurants()
+        
+        # Filter by rating range
+        filtered_restaurants = []
+        for restaurant in restaurants:
+            if restaurant.personal_rating is None:
+                continue
+            
+            if min_rating is not None and restaurant.personal_rating < min_rating:
+                continue
+                
+            if max_rating is not None and restaurant.personal_rating > max_rating:
+                continue
+                
+            filtered_restaurants.append(restaurant)
+        
+        if not filtered_restaurants:
+            rating_criteria = []
+            if min_rating is not None:
+                rating_criteria.append(f">= {min_rating}")
+            if max_rating is not None:
+                rating_criteria.append(f"<= {max_rating}")
+            criteria_str = " and ".join(rating_criteria) if rating_criteria else "any rating"
+            return f"No restaurants found with rating {criteria_str}"
+        
+        # Sort by rating (highest first), then by date visited (most recent first)
+        filtered_restaurants.sort(key=lambda r: (r.personal_rating or 0, r.date_visited or datetime.min), reverse=True)
+        
+        rating_info = {
+            "criteria": {
+                "min_rating": min_rating,
+                "max_rating": max_rating
+            },
+            "total_matches": len(filtered_restaurants),
+            "restaurants": []
+        }
+        
+        for restaurant in filtered_restaurants[:limit]:
+            restaurant_data = {
+                "name": restaurant.name,
+                "rating": restaurant.personal_rating,
+                "date_visited": restaurant.date_visited.isoformat() if restaurant.date_visited else None,
+                "location": f"{restaurant.location.city}, {restaurant.location.state}" if restaurant.location.state else restaurant.location.city,
+                "cuisine_types": [c.value for c in restaurant.cuisine_types],
+                "price_range": restaurant.price_range.value if restaurant.price_range else None,
+                "notes": restaurant.notes,
+                "revisit": restaurant.revisit
+            }
+            rating_info["restaurants"].append(restaurant_data)
+        
+        return json.dumps(rating_info, indent=2)
+        
+    except Exception as e:
+        logger.error(f"Failed to get restaurants by rating: {e}")
+        return f"Error getting restaurants by rating: {str(e)}"
 
 def main():
     """Main function to run the MCP server."""
@@ -732,6 +954,10 @@ def main():
     
     # Run the server
     logger.info("MCP Server ready to accept connections")
+    
+    # Start the MCP server with stdio transport
+    import asyncio
+    asyncio.run(mcp.run_stdio_async())
     
 if __name__ == "__main__":
     main()

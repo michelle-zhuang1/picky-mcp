@@ -2,11 +2,14 @@
 
 import os
 from typing import Optional
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+import pathlib
+project_root = pathlib.Path(__file__).parent.parent
+load_dotenv(project_root / ".env")
 
 
 class Settings(BaseSettings):
@@ -16,8 +19,8 @@ class Settings(BaseSettings):
     notion_api_key: str = Field(..., env="NOTION_API_KEY")
     notion_database_id: str = Field(..., env="NOTION_DATABASE_ID")
     
-    # Google Maps API Configuration
-    google_maps_api_key: str = Field(..., env="GOOGLE_MAPS_API_KEY")
+    # Google Maps API Configuration  
+    google_places_api_key: str = Field(..., env="GOOGLE_PLACES_API_KEY")
     
     # MCP Server Configuration
     mcp_server_host: str = Field(default="localhost", env="MCP_SERVER_HOST")
@@ -29,9 +32,7 @@ class Settings(BaseSettings):
     default_search_radius_km: float = Field(default=25.0, env="DEFAULT_SEARCH_RADIUS_KM")
     cache_ttl_seconds: int = Field(default=3600, env="CACHE_TTL_SECONDS")
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = {"env_file": str(project_root / ".env"), "case_sensitive": False, "extra": "ignore"}
 
 
 def get_settings() -> Settings:
@@ -48,7 +49,7 @@ def validate_configuration() -> dict:
             "message": "Configuration valid",
             "settings": {
                 "notion_configured": bool(settings.notion_api_key and settings.notion_database_id),
-                "google_maps_configured": bool(settings.google_maps_api_key),
+                "google_maps_configured": bool(settings.google_places_api_key),
                 "debug_mode": settings.debug,
             }
         }

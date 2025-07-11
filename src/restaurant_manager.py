@@ -12,7 +12,7 @@ from .models import (
     RecommendationContext, Location, CuisineType, PriceRange,
     VibeType, OccasionType, RecommendationSession, SessionFeedback
 )
-from .notion_client import NotionManager
+from .notion_manager import NotionManager
 from .maps_client import GoogleMapsClient
 from .config import settings
 
